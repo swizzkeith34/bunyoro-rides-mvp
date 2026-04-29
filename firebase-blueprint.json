@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about a user, either a client or a rider.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["client", "rider"] },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "timestamp": { "type": "string", "format": "date-time" }
+          },
+          "required": ["lat", "lng", "timestamp"]
+        },
+        "isOnline": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "email", "role", "updatedAt"]
+    },
+    "Ride": {
+      "title": "Ride Request",
+      "description": "Details of a ride request from a client to a rider.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "riderId": { "type": "string" },
+        "pickup": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "address": { "type": "string" }
+          },
+          "required": ["lat", "lng", "address"]
+        },
+        "destination": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "address": { "type": "string" }
+          },
+          "required": ["lat", "lng", "address"]
+        },
+        "type": { "type": "string", "enum": ["usual", "electric"] },
+        "status": { "type": "string", "enum": ["requested", "accepted", "picked_up", "completed", "cancelled"] },
+        "price": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "pickup", "destination", "type", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles for clients and riders."
+    },
+    "/rides/{rideId}": {
+      "schema": "Ride",
+      "description": "Active and past ride requests."
+    }
+  }
+}

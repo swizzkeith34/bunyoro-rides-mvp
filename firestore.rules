@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && resource.data.role == 'rider' && resource.data.isOnline == true;
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['location', 'isOnline', 'updatedAt', 'displayName', 'photoURL'])
+      );
+
+      function isValidUser(data) {
+        return data.keys().hasAll(['phone', 'role', 'updatedAt']) && data.keys().size() == 3 &&
+               data.phone is string &&
+               data.role in ['client', 'rider'] &&
+               data.updatedAt == request.time;
+      }
+    }
+
+    // --- Rides ---
+    match /rides/{rideId} {
+      allow get: if isSignedIn() && (isClient() || isRider() || isUnassignedRider());
+      allow list: if isSignedIn() && (
+        (resource.data.clientId == request.auth.uid) ||
+        (resource.data.riderId == request.auth.uid) ||
+        (resource.data.status == 'requested' && isUserRider())
+      );
+      allow create: if isSignedIn() && isUserClient() && isValidRide(incoming()) && incoming().clientId == request.auth.uid && incoming().status == 'requested';
+      allow update: if isSignedIn() && isValidRide(incoming()) && (
+        // Action: Accept Ride (Rider only)
+        (isAcceptAction() && isUserRider() && existing().status == 'requested' && incoming().riderId == request.auth.uid) ||
+        // Action: Progress Status (Rider only)
+        (isProgressAction() && incoming().riderId == request.auth.uid) ||
+        // Action: Cancel (Client only)
+        (isCancelAction() && existing().clientId == request.auth.uid && existing().status == 'requested')
+      );
+
+      function isClient() { return resource.data.clientId == request.auth.uid; }
+      function isRider() { return resource.data.riderId == request.auth.uid; }
+      function isUnassignedRider() { return resource.data.status == 'requested' && isUserRider(); }
+
+      function isUserClient() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client'; }
+      function isUserRider() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'rider'; }
+
+      function isAcceptAction() {
+        return incoming().diff(existing()).affectedKeys().hasOnly(['status', 'riderId', 'updatedAt']) &&
+               incoming().status == 'accepted';
+      }
+
+      function isProgressAction() {
+        return incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+               ((existing().status == 'accepted' && incoming().status == 'picked_up') ||
+                (existing().status == 'picked_up' && incoming().status == 'completed'));
+      }
+
+      function isCancelAction() {
+        return incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+               incoming().status == 'cancelled';
+      }
+
+      function isValidRide(data) {
+        return data.keys().hasAll(['clientId', 'pickup', 'destination', 'type', 'status', 'createdAt', 'updatedAt']) &&
+               data.clientId is string && isValidId(data.clientId) &&
+               data.type in ['usual', 'electric'] &&
+               data.status in ['requested', 'accepted', 'picked_up', 'completed', 'cancelled'] &&
+               data.createdAt is timestamp &&
+               data.updatedAt == request.time &&
+               data.pickup.lat is number && data.pickup.lng is number && data.pickup.address is string &&
+               data.destination.lat is number && data.destination.lng is number && data.destination.address is string;
+      }
+    }
+  }
+}

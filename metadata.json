@@ -1,0 +1,11 @@
+{
+  "name": "Bunyoro Rides",
+  "description": "A premium ride-hailing app for Hoima and the Bunyoro region, featuring usual and electric motorcycles with real-time tracking.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "Real-time ride tracking",
+    "Driver availability management"
+  ]
+}
